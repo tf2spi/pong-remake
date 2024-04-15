@@ -26,8 +26,10 @@ BPL _RamSetData
 
 _HwRegInit:
 ; Background to black
+; Set Port A to INPUT
 LDX #0
 STX COLUBK
+STX SWACNT
 
 ; Enable reflection of playfield
 LDX #1
@@ -93,8 +95,43 @@ LDX #$00
 STX GRP0
 STX GRP1
 
+; Process P0,P1 input (HBLANK -> 6)
+STA WSYNC
+LDA SWCHA
+
+ROL A
+ROL A
+ROL A
+BCC _SkipMoveP0Down
+INC p0y
+_SkipMoveP0Down:
+ROL A
+BCC _SkipMoveP0Up
+DEC p0y
+_SkipMoveP0Up:
+
+PHA
+LDY p0y
+JSR BoundBat
+STA p0y
+PLA
+STA WSYNC
+ROL A
+ROL A
+ROL A
+BCC _SkipMoveP1Down
+INC p1y
+_SkipMoveP1Down:
+ROL A
+BCC _SkipMoveP1Up
+DEC p1y
+_SkipMoveP1Up:
+LDY p1y
+JSR BoundBat
+STA p1y
+
 ; HBlank wait remaning lines (HBLANK -> 22)
-LDY #18
+LDY #16
 JSR HBlankWait
 
 ; Render for 230 scanlines
@@ -150,6 +187,7 @@ LDY #30
 JSR HBlankWait
 JMP _GameLoop
 
+; Y = Number of loops to busy wait
 .ORGA $FF00
 BusyWait2:
 NOP
@@ -161,11 +199,26 @@ DEY
 BNE _BusyWaitLoop
 RTS
 
+; Y = # of HBLANKS
 HBlankWait:
 _HBlankWaitLoop:
 STA WSYNC
 DEY
 BNE _HBlankWaitLoop
+RTS
+
+; Y = Bat position
+; Return new bat position in A 
+BoundBat:
+CPY #23
+BCS _SkipBatBoundLower
+LDY #23
+_SkipBatBoundLower:
+CPY #114
+BCC _SkipBatBoundHigher
+LDY #114
+_SkipBatBoundHigher:
+TYA
 RTS
 
 .ORGA $FFFA
