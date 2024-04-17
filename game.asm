@@ -8,12 +8,18 @@
 p0y DB
 p1y DB
 enam0flag DB
+spawnball DB
+blx DB
+bly DB
 .ENDE
 
 _DataStart:
-.DB 55 ; p0y
-.DB 55 ; p1y
-.DB 0  ; enam0flag
+.DB 55   ; p0y
+.DB 55   ; p1y
+.DB 0    ; enam0flag
+.DB $80  ; spawnball
+.DB 100  ; blx
+.DB 55   ; bly
 _DataEnd:
 
 Entry:
@@ -32,7 +38,8 @@ STX COLUBK
 STX SWACNT
 
 ; Enable reflection of playfield
-LDX #1
+; Set ball size to 4 color cycles
+LDX #$21
 STX CTRLPF
 
 ; Playfield to Grey-Gold, White
@@ -89,13 +96,25 @@ LDY #11
 JSR BusyWait0
 STA RESP1
 
-; Render players in loop (HBLANK -> 4)
+; Position Ball (HBLANK -> 4)
+STA WSYNC
+BIT spawnball
+BPL _SkipSpawnBl
+LDY #5
+JSR BusyWait0
+STA RESBL
+_SkipSpawnBl:
+LDX #0
+STX ENABL
+INC bly
+
+; Render players in loop (HBLANK -> 5)
 STA WSYNC 
 LDX #$00
 STX GRP0
 STX GRP1
 
-; Process P0,P1 input (HBLANK -> 6)
+; Process P0,P1 input (HBLANK -> 7)
 STA WSYNC
 LDA SWCHA
 
@@ -130,42 +149,22 @@ LDY p1y
 JSR BoundBat
 STA p1y
 
-; HBlank wait remaning lines (HBLANK -> 22)
-LDY #16
+
+; HBlank wait remaning lines (HBLANK -> 21)
+LDY #14
 JSR HBlankWait
 
 ; Render for 230 scanlines
 ; Update every 2 scanlines
+; Enter render loop on new scanline (HBLANK -> 22)
 LDY #115
 LDX #$02
 STX enam0flag
+STA WSYNC
+JMP _RenderLoop
+
+.ORGA $F200
 _RenderLoop:
-TYA
-CLC
-SBC p0y
-BNE _SkipP0Render
-LDX #$0F
-STX GRP0
-_SkipP0Render:
-CLC
-ADC #24
-BNE _SkipP0Unrender
-LDX #$00
-STX GRP0
-_SkipP0Unrender:
-TYA
-CLC
-SBC p1y
-BNE _SkipP1Render
-LDX #$F0
-STX GRP1
-_SkipP1Render:
-CLC
-ADC #24
-BNE _SkipP1Unrender
-LDX #$00
-STX GRP1
-_SkipP1Unrender:
 _RenderM0:
 TYA
 AND #3
@@ -176,6 +175,51 @@ STA enam0flag
 STA ENAM0
 _SkipENAM0Change:
 STA WSYNC
+_RenderBl:
+TYA
+CLC
+SBC bly
+BNE _SkipBlRender
+LDX #$03
+STX ENABL
+; BNE _RenderP0 ; Unconditional branch
+_SkipBlRender:
+ADC #4
+BNE _SkipBlUnrender
+LDX #$00
+STX ENABL
+_SkipBlUnrender:
+_RenderP0:
+TYA
+CLC
+SBC p0y
+BNE _SkipP0Render
+LDX #$0F
+STX GRP0
+; BNE _RenderP1 ; Unconditional branch
+_SkipP0Render:
+CLC
+ADC #24
+BNE _SkipP0Unrender
+LDX #$00
+STX GRP0
+_SkipP0Unrender:
+_RenderP1:
+TYA
+CLC
+SBC p1y
+BNE _SkipP1Render
+LDX #$0F
+STX GRP1
+; BNE _RenderSync ; Unconditional branch
+_SkipP1Render:
+CLC
+ADC #24
+BNE _SkipP1Unrender
+LDX #$00
+STX GRP1
+_SkipP1Unrender:
+_RenderSync:
 STA WSYNC
 DEY
 BNE _RenderLoop
