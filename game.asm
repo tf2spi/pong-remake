@@ -7,23 +7,41 @@
 .ENUM $80
 p0y DB
 p1y DB
+p0pixels DB
+p1pixels DB
+blflag DB
 enam0flag DB
 spawnball DB
 blx DB
 bly DB
+scoretile DB
+p0score DW
+p1score DW
+p0scorepf DB
+p1scorepf DB
 .ENDE
 
 _DataStart:
-.DB 55   ; p0y
-.DB 55   ; p1y
+.DB 27   ; p0y
+.DB 27   ; p1y
+.DB 0    ; p0pixels
+.DB 0    ; p1pixels
+.DB 0    ; blflag
 .DB 0    ; enam0flag
 .DB $80  ; spawnball
 .DB 100  ; blx
-.DB 55   ; bly
+.DB 27   ; bly
+.DB 5    ; scoretile
+.DW N0Tiles ; p0score
+.DW N1Tiles ; p1score
+.DB 0       ; p0scorepf
+.DB 0       ; p1scorepf
 _DataEnd:
 
 Entry:
 LDY #(_DataEnd - _DataStart - 1)
+LDX #$FF
+TXS
 _RamSetData:
 LDX.W _DataStart,Y
 STX $80,Y
@@ -33,13 +51,16 @@ BPL _RamSetData
 _HwRegInit:
 ; Background to black
 ; Set Port A to INPUT
+; Set PF0 and PF2 to unused
 LDX #0
 STX COLUBK
 STX SWACNT
+STX PF0
+STX PF2
 
 ; Enable reflection of playfield
 ; Set ball size to 4 color cycles
-LDX #$21
+LDX #$20
 STX CTRLPF
 
 ; Playfield to Grey-Gold, White
@@ -48,6 +69,10 @@ LDX #$0F
 STX COLUPF
 STX COLUP0
 STX COLUP1
+
+; Set missle 0 to have small size
+LDX #$00
+STX NUSIZ0
 
 _GameLoop:
 ; Do VBLANKs and VSYNCs first
@@ -63,20 +88,6 @@ JSR HBlankWait
 
 LDA #0
 STA VSYNC
-
-; Setup playfield vars
-LDX #0
-STX PF0
-STX PF1
-STX PF2
-
-; Enable missle 0 and set small size
-LDX #$00
-STX NUSIZ0
-LDX #$02
-STX ENAM0
-LDX #$0F
-STX COLUP0
 
 ; Position Missle 0 (HBLANK -> 1)
 STA WSYNC
@@ -107,12 +118,17 @@ _SkipSpawnBl:
 LDX #0
 STX ENABL
 INC bly
+LDY bly
+_BoundBlDown:
+CPY #57
+BNE _SkipWrapBl
+LDY #2
+_SkipWrapBl:
+STY bly
 
 ; Render players in loop (HBLANK -> 5)
 STA WSYNC 
 LDX #$00
-STX GRP0
-STX GRP1
 
 ; Process P0,P1 input (HBLANK -> 7)
 STA WSYNC
@@ -149,87 +165,173 @@ LDY p1y
 JSR BoundBat
 STA p1y
 
-
 ; HBlank wait remaning lines (HBLANK -> 21)
 LDY #14
 JSR HBlankWait
 
-; Render for 230 scanlines
-; Update every 2 scanlines
-; Enter render loop on new scanline (HBLANK -> 22)
-LDY #115
+; Set initial state of missle and 
 LDX #$02
 STX enam0flag
+STX ENAM0
+LDX #$00
+STX p0scorepf
+STX p1scorepf
+STX p0pixels
+STX p1pixels
+STX GRP0
+STX GRP1
+STX PF1
+LDX #$01
+STX blflag
+STX ENABL
+LDX #$05
+STX scoretile
+
+; Render for 230 scanlines
+; Update every 4 scanlines
+; Enter render loop on new scanline (HBLANK -> 22)
+LDX #57
 STA WSYNC
 JMP _RenderLoop
 
+.ORGA $F1E0
+_SkipPFDelay:
+LDY #1
+BNE _SkipPFChange
+
+_SkipBGDelay:
+NOP
+NOP
+LDY #1
+BNE _SkipBGChange
+
 .ORGA $F200
 _RenderLoop:
-_RenderM0:
-TYA
-AND #3
-BNE _SkipENAM0Change
+_UpdateBG:
+LDY p0scorepf
+STY PF1
+TXA
+AND #1
+BNE _SkipBGDelay
+LDY scoretile
+BEQ _SkipPFDelay
+DEY
+STY scoretile
+LDA (p0score),Y
+STA p0scorepf
+LDA (p1score),Y
+STA p1scorepf
+STA PF1
+_SkipPFChange:
 LDA enam0flag
 EOR #$02
 STA enam0flag
-STA ENAM0
-_SkipENAM0Change:
+_SkipBGChange:
+LDY p1scorepf
+STY PF1
 STA WSYNC
-_RenderBl:
-TYA
-CLC
-SBC bly
-BNE _SkipBlRender
-LDX #$03
-STX ENABL
-; BNE _RenderP0 ; Unconditional branch
-_SkipBlRender:
-ADC #4
-BNE _SkipBlUnrender
-LDX #$00
-STX ENABL
-_SkipBlUnrender:
-_RenderP0:
-TYA
+_ChangeP0:
+LDY p0scorepf
+STY PF1
+TXA
 CLC
 SBC p0y
-BNE _SkipP0Render
-LDX #$0F
-STX GRP0
-; BNE _RenderP1 ; Unconditional branch
-_SkipP0Render:
-CLC
-ADC #24
-BNE _SkipP0Unrender
-LDX #$00
-STX GRP0
-_SkipP0Unrender:
-_RenderP1:
-TYA
+BEQ _P0Change
+CMP #-12
+BNE _SkipP0Change
+_P0Change:
+LDA p0pixels
+EOR #$0F
+STA p0pixels
+_SkipP0Change:
+_ChangeP1:
+TXA
 CLC
 SBC p1y
-BNE _SkipP1Render
-LDX #$0F
-STX GRP1
-; BNE _RenderSync ; Unconditional branch
-_SkipP1Render:
-CLC
-ADC #24
-BNE _SkipP1Unrender
-LDX #$00
-STX GRP1
-_SkipP1Unrender:
-_RenderSync:
+BEQ _P1Change
+CMP #-12
+BNE _SkipP1Change
+_P1Change:
+LDA p1pixels
+EOR #$0F
+STA p1pixels
+_SkipP1Change:
+LDY p1scorepf
+STY PF1
 STA WSYNC
-DEY
-BNE _RenderLoop
 
+_RenderSync:
+LDY blflag
+STY ENABL
+LDY p0pixels
+STY GRP0
+LDY p0scorepf
+STY PF1
+LDY enam0flag
+STY ENAM0
+LDY p1pixels
+STY GRP1
+LDY #1
+JSR BusyWait0
+LDY p1scorepf
+STY PF1
+STA WSYNC
+_ChangeBl:
+LDY p0scorepf
+STY PF1
+TXA
+CLC
+SBC bly
+BEQ _BlChange
+CMP #-2
+BNE _SkipBlChange
+_BlChange:
+LDA blflag
+EOR #$02
+STA blflag
+_SkipBlChange:
+LDY #1
+JSR BusyWait0
+LDY p1scorepf
+STY PF1
+STA WSYNC
+DEX
+BEQ _RenderLoopExit
+JMP _RenderLoop
+
+_RenderLoopExit:
 LDA #$42
 STA VSYNC
 
 LDY #30
 JSR HBlankWait
 JMP _GameLoop
+
+.ORGA $FE00
+N0Tiles:
+.DB $00
+.DB $07
+.DB $05
+.DB $05
+.DB $07
+N1Tiles:
+.DB $00
+.DB $07
+.DB $02
+.DB $02
+.DB $06
+N10Tiles:
+.DB $00
+.DB $77
+.DB $25
+.DB $25
+.DB $67
+NStressTiles:
+.DB $ff
+.DB $ff
+.DB $ff
+.DB $ff
+.DB $ff
 
 ; Y = Number of loops to busy wait
 .ORGA $FF00
@@ -254,13 +356,13 @@ RTS
 ; Y = Bat position
 ; Return new bat position in A 
 BoundBat:
-CPY #23
+CPY #12
 BCS _SkipBatBoundLower
-LDY #23
+LDY #12
 _SkipBatBoundLower:
-CPY #114
+CPY #56
 BCC _SkipBatBoundHigher
-LDY #114
+LDY #56
 _SkipBatBoundHigher:
 TYA
 RTS
