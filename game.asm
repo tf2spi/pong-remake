@@ -32,16 +32,22 @@ _DataStart:
 .DB 100  ; blx
 .DB 27   ; bly
 .DB 5    ; scoretile
-.DW N0Tiles ; p0score
-.DW N1Tiles ; p1score
-.DB 0       ; p0scorepf
-.DB 0       ; p1scorepf
+.DW N0Tiles  ; p0score
+.DW N0Tiles  ; p1score
+.DB 0        ; p0scorepf
+.DB 0        ; p1scorepf
 _DataEnd:
 
 Entry:
-LDY #(_DataEnd - _DataStart - 1)
-LDX #$FF
+LDX #0
+TXA
+_ClearRAMAndTIA:
+DEX
 TXS
+PHA
+BNE _ClearRAMAndTIA
+
+LDY #(_DataEnd - _DataStart - 1)
 _RamSetData:
 LDX.W _DataStart,Y
 STX $80,Y
@@ -111,9 +117,10 @@ STA RESP1
 STA WSYNC
 BIT spawnball
 BPL _SkipSpawnBl
-LDY #5
+LDY #3
 JSR BusyWait0
 STA RESBL
+ASL spawnball
 _SkipSpawnBl:
 LDX #0
 STX ENABL
@@ -127,7 +134,7 @@ _SkipWrapBl:
 STY bly
 
 ; Render players in loop (HBLANK -> 5)
-STA WSYNC 
+STA WSYNC
 LDX #$00
 
 ; Process P0,P1 input (HBLANK -> 7)
@@ -165,11 +172,17 @@ LDY p1y
 JSR BoundBat
 STA p1y
 
+; Move dat ball boi (HBLANK -> 8)
+LDA #$F0
+STA HMBL
+STA WSYNC
+STA HMOVE
+
 ; HBlank wait remaning lines (HBLANK -> 21)
-LDY #14
+LDY #13
 JSR HBlankWait
 
-; Set initial state of missle and 
+; Set initial state of missle and players and ball
 LDX #$02
 STX enam0flag
 STX ENAM0
@@ -327,11 +340,11 @@ N10Tiles:
 .DB $25
 .DB $67
 NStressTiles:
+.DB $00
 .DB $ff
+.DB $7f
 .DB $ff
-.DB $ff
-.DB $ff
-.DB $ff
+.DB $7f
 
 ; Y = Number of loops to busy wait
 .ORGA $FF00
