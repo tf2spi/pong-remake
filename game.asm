@@ -19,6 +19,7 @@ p0score DW
 p1score DW
 p0scorepf DB
 p1scorepf DB
+blvel DB
 .ENDE
 
 _DataStart:
@@ -36,6 +37,7 @@ _DataStart:
 .DW N0Tiles  ; p1score
 .DB 0        ; p0scorepf
 .DB 0        ; p1scorepf
+.DB 1        ; blvel
 _DataEnd:
 
 Entry:
@@ -124,14 +126,22 @@ ASL spawnball
 _SkipSpawnBl:
 LDX #0
 STX ENABL
-INC bly
-LDY bly
-_BoundBlDown:
-CPY #57
-BNE _SkipWrapBl
-LDY #2
-_SkipWrapBl:
-STY bly
+LDA bly
+CLC
+ADC blvel
+STA bly
+_CollideBlDown:
+CMP #56
+BNE _CollideBlUp
+LDX #-1
+STX blvel
+_CollideBlUp:
+CMP #3
+BNE _SkipCollideBl
+LDX #1
+STX blvel
+_SkipCollideBl:
+STA bly
 
 ; Render players in loop (HBLANK -> 5)
 STA WSYNC
