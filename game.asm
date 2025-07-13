@@ -20,6 +20,8 @@ p1score DW
 p0scorepf DB
 p1scorepf DB
 blvel DB
+sndleft DB
+playercollisions DB
 .ENDE
 
 _DataStart:
@@ -38,6 +40,8 @@ _DataStart:
 .DB 0        ; p0scorepf
 .DB 0        ; p1scorepf
 .DB 1        ; blvel
+.DB 10       ; sndleft
+.DB 0        ; playercollisions
 _DataEnd:
 
 Entry:
@@ -81,6 +85,14 @@ STX COLUP1
 ; Set missle 0 to have small size
 LDX #$00
 STX NUSIZ0
+
+LDX #$0A
+STX AUDF0
+LDX #$0C
+STX AUDC0
+
+LDX #$0F
+STX AUDV0
 
 _GameLoop:
 ; Do VBLANKs and VSYNCs first
@@ -188,8 +200,39 @@ STA HMBL
 STA WSYNC
 STA HMOVE
 
+; Stop playing the sound (HBLANK -> 9)
+STA WSYNC
+LDX sndleft
+BEQ _SoundDone
+DEX
+STX sndleft
+BNE _SoundDone
+STX AUDV0
+_SoundDone:
+
+; Read collisions (HBLANK -> 10)
+; Bit 6 = P0 & Ball collision, Bit 7 = P1 & Ball collision
+STA WSYNC
+LDA sndleft
+BNE _P1NoCollide
+BIT CXP0FB
+BVC _P0NoCollide
+LDX #$0F
+STX AUDV0
+LDX #10
+STX sndleft
+_P0NoCollide:
+BIT CXP1FB
+BVC _P1NoCollide
+LDX #$0F
+STX AUDV0
+LDX #10
+STX sndleft
+_P1NoCollide:
+STA CXCLR
+
 ; HBlank wait remaning lines (HBLANK -> 21)
-LDY #13
+LDY #11
 JSR HBlankWait
 
 ; Set initial state of missle and players and ball
