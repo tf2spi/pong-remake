@@ -32,7 +32,7 @@ _DataStart:
 .DB 0    ; blflag
 .DB 0    ; enam0flag
 .DB $80  ; spawnball
-.DB 100  ; blx
+.DB $10  ; blx
 .DB 27   ; bly
 .DB 5    ; scoretile
 .DW N0Tiles  ; p0score
@@ -195,7 +195,7 @@ JSR BoundBat
 STA p1y
 
 ; Move dat ball boi (HBLANK -> 8)
-LDA #$F0
+LDA blx
 STA HMBL
 STA WSYNC
 STA HMOVE
