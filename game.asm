@@ -420,7 +420,7 @@ BNE _HBlankWaitLoop
 RTS
 
 ; Y = Bat position
-; Return new bat position in A 
+; Return new bat position in A
 BoundBat:
 CPY #12
 BCS _SkipBatBoundLower
